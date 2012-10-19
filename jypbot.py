@@ -60,7 +60,7 @@ def getAvailableNumShips(pw, p):
                     rst += (x.NumShips() - ((x.TurnsRemaining()-1) * p.GrowthRate()))+1
     return rst
 def PlanetThinks(pw, p):
-    G_RATE = 2
+    G_RATE = 20
     global help_requests, attack_requests
     if getAvailableNumShips(pw, p) <= 0:
         # Help Me!
