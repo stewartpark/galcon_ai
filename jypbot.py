@@ -6,7 +6,7 @@
 """
 import math
 
-LOGGING = True
+LOGGING = False
 
 if LOGGING:
     import logging
@@ -38,6 +38,7 @@ logging.basicConfig(filename='output.log', level=logging.DEBUG)
 nTurn = 0
 help_requests = []
 attack_requests = []
+restrict_numships = {}
 
 # Vote
 def help(pw, p, amount):
@@ -86,8 +87,8 @@ def getAvailableNumShips(pw, p):
     return rst
 def PlanetThinks(pw, p):
     G_RATE = 20
-    RISK_D = 12
-    global help_requests, attack_requests
+    RISK_D = max(15 - (len(pw.MyPlanets()*2) ), 6) #12 if len(pw.MyPlanets()) < 5 else 6 # If the early stage or in danger, make planets feel risk, otherwise normal.
+    global help_requests, attack_requests, restrict_numships
     giveUpVote = False
     gAv = getAvailableNumShips(pw, p)
     if gAv <= 0: # Will die
@@ -112,14 +113,15 @@ def PlanetThinks(pw, p):
 
                 if tmp < 0:
                     logging.debug('P%d: is uncomfortable with P%d.', p.PlanetID(), x.PlanetID())
-                    keep_so += -tmp
+                    #keep_so += -tmp
+                    keep_so = max(-tmp, keep_so)
         if p.NumShips() < keep_so:
             # need help
             amount += keep_so - p.NumShips()
             keep_so = p.NumShips() # should keep all of them
         if keep_so > 0:
             logging.debug('P%d decides how many sodilers should stay for their safety.: %d/%d', p.PlanetID(), keep_so, p.NumShips())
-            p._num_ships = keep_so
+            restrict_numships[p.PlanetID()] = keep_so
         if amount > 0:
             logging.debug('P%d needs reinforcement! <--%d--' % (p.PlanetID(),amount))
             help(pw, p, amount)
@@ -143,6 +145,11 @@ def PlanetThinks(pw, p):
     try:
         logging.debug('P%d thinks the best target is P%d!' % (p.PlanetID(), attack_list[0][0].PlanetID()))
         #gen = (x for x in atttack_list)
+        #v = 10
+        #for x in range(v):
+        #   vv = gen.next()
+        #    for _ in range(x):
+        #        attack(pw, vv)
         for _ in xrange(4):
             attack(pw, attack_list[0][0]) # Best vote: weight 4
         for _ in xrange(2):
@@ -154,14 +161,14 @@ def PlanetThinks(pw, p):
 def DoTurn(pw):
     if len(pw.NotMyPlanets()) == 0: return
     if len(pw.MyPlanets()) == 0: return
-    global help_requests, attack_requests
+    global help_requests, attack_requests,restrict_numships
     global nTurn 
     logging.debug('====== Turn %d' % (nTurn,))
     nTurn += 1
     # initialize
     help_requests = []
     attack_requests = []
-
+    restrict_numships = {}
     planets = sorted(pw.MyPlanets(), key=lambda x: -getAvailableNumShips(pw, x))
     logging.debug('[1] Planet is voting...')
     for x in planets:
@@ -173,6 +180,9 @@ def DoTurn(pw):
     #logging.debug('[3] Planet is voting...')
     #for x in planets:
     #    PlanetThinks(pw, x)
+    ### NumShips Restriction if the plant is in danger ####
+    for x in restrict_numships:
+        pw.GetPlanet(x)._num_ships = restrict_numships[x]
     logging.debug('Planet is deciding...')
     # Get total avail
     s_avail = sum(map(lambda x: x if x >= 0 else 0, map(lambda x: getAvailableNumShips(pw,x) if getAvailableNumShips(pw,x) > 1 else 0, planets)))
@@ -203,7 +213,7 @@ def DoTurn(pw):
         must_action = False
         if x[0].Owner() == 1: # Planet needs help
             logging.debug('Planets decided to help P%d.' % (x[0].PlanetID(),))
-            v = (-getAvailableNumShips(pw, x[0]))+1
+            v = filter(lambda y: y[0] == x[0], help_requests)[0][1] #(-getAvailableNumShips(pw, x[0]))+1
             # Should we must help the planet?
             if x[0].GrowthRate() > 3:
                 must_action = True # if it is big planet, yes.
